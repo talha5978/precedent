@@ -173,3 +173,16 @@ Keep each milestone deployable, and verify Forge limits and APIs before adopting
   - [x] Supersede action: records new decision statement and rationale, links lineage (`supersedes`), and updates status.
   - [x] Exception action: time-boxed exception with justification and expiry date.
   - [x] Full mutation audit trail in `auditLogs` and `resolutions` repositories.
+- [x] Tier B, step 11: decision lineage view.
+  - [x] Dedicated "Decision Lineage" tab displaying architectural relations (`supersedes`, `depends_on`).
+  - [x] Visual graph connections linking previous and superseded decisions with rationale citations.
+- [x] Tier B, step 12: Rovo agent ("Why do we do X?").
+  - [x] Registered `rovo:agent` ("Precedent Decision Agent") in `manifest.yml`.
+  - [x] Built 3 reusable actions: `search-decisions-action`, `get-decision-action`, and `check-issue-conflicts-action`.
+  - [x] Grounded answers enforcing source citations, excerpts, and honest uncertainty ("No explicit rationale recorded").
+- [x] Tier B, step 16: decision health dashboard.
+  - [x] Dedicated "Health Dashboard" tab tracking active/superseded counts, conflict resolution rate, and resolution distribution.
+  - [x] Leaderboard of top contradiction hotspots.
+- [x] Tier B, step 17: feedback loop.
+  - [x] Inline 👍 / 👎 feedback widgets in both Review Inbox and Jira Issue Panel.
+  - [x] Typed `feedback` repository storing user precision ratings.
