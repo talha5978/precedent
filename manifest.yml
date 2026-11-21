@@ -1,19 +1,29 @@
 modules:
   jira:globalPage:
     - key: precedent-home
+      resource: main
       resolver:
         function: resolver
+      render: native
       title: Precedent
   function:
     - key: resolver
       handler: index.handler
+resources:
+  - key: main
+    path: src/frontend/index.tsx
 app:
   id: ari:cloud:ecosystem::app/00000000-0000-4000-8000-000000000001
+  compatibility:
+    jira:
+      required: true
+    confluence:
+      required: false
   runtime:
     name: nodejs20.x
 permissions:
   scopes:
     - storage:app
-  content:
-    styles:
-      - unsafe-inline
+    - read:project:jira
+    - read:permission:jira
+    - read:space:confluence

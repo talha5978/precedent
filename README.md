@@ -47,7 +47,8 @@ below follows [PLAN.md](./PLAN.md), which remains the detailed product and archi
 ## Local setup
 
 Install Node.js 20+, npm, and the Forge CLI. Register this app with Atlassian, then replace the
-placeholder app ID in `manifest.yml` with the registered app ID. Run:
+placeholder app ID in `manifest.yml` with the registered app ID. Jira is required; Confluence is an
+optional product connection, so connect it on sites where Precedent should scan Confluence. Run:
 
 ```sh
 npm install
