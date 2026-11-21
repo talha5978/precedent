@@ -19,7 +19,7 @@ export function getSampleDecisions(): Decision[] {
         components: ['database', 'persistence', 'storage'],
         labels: ['architecture', 'db'],
         keywords: ['postgres', 'postgresql', 'sql', 'relational', 'rdbms'],
-        codePaths: ['src/db', 'src/storage'],
+        codePaths: [],
       },
       source: {
         type: 'page',
@@ -47,7 +47,7 @@ export function getSampleDecisions(): Decision[] {
         components: ['telemetry', 'monitoring', 'observability'],
         labels: ['observability', 'infra'],
         keywords: ['opentelemetry', 'otel', 'jaeger', 'tracing', 'datadog'],
-        codePaths: ['src/telemetry', 'src/tracing'],
+        codePaths: [],
       },
       source: {
         type: 'page',
@@ -75,7 +75,7 @@ export function getSampleDecisions(): Decision[] {
         components: ['api', 'rpc', 'networking'],
         labels: ['architecture', 'api'],
         keywords: ['grpc', 'protobuf', 'rpc', 'inter-service'],
-        codePaths: ['proto/', 'src/rpc/'],
+        codePaths: [],
       },
       source: {
         type: 'comment',
@@ -103,7 +103,7 @@ export function getSampleDecisions(): Decision[] {
         components: ['cache', 'redis'],
         labels: ['cache', 'infra'],
         keywords: ['redis', 'caching', 'ttl', 'ephemeral', 'session'],
-        codePaths: ['src/cache'],
+        codePaths: [],
       },
       source: {
         type: 'page',
