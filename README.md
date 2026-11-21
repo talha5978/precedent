@@ -46,9 +46,11 @@ below follows [PLAN.md](./PLAN.md), which remains the detailed product and archi
 
 ## Local setup
 
-Install Node.js 20+, npm, and the Forge CLI. Register this app with Atlassian, then replace the
-placeholder app ID in `manifest.yml` with the registered app ID. Jira is required; Confluence is an
-optional product connection, so connect it on sites where Precedent should scan Confluence. Run:
+Use Node.js 24 for local development ([`.nvmrc`](./.nvmrc) pins the major version) and for the
+deployed Forge function runtime. Forge CLI supports Node.js 22 and 24. With nvm installed, run
+`nvm install` and `nvm use` from the repo, then
+run `npm install` to sync `package-lock.json`. Register this app with Atlassian; Jira is required and
+Confluence is optional, so connect it on sites where Precedent should scan Confluence. Then run:
 
 ```sh
 npm install
