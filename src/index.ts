@@ -25,12 +25,17 @@ import {
   CURRENT_SCHEMA_VERSION,
   type CandidateStatus,
   type Decision,
+  type DecisionProposal,
   type DecisionScope,
   type DecisionStatus,
   type Resolution,
   type Verdict,
 } from './domain/models';
 import { getSampleCandidates, getSampleDecisions } from './domain/sampleData';
+import {
+  buildIdempotentCandidates,
+  HeuristicDecisionExtractor,
+} from './domain/extractor';
 import {
   computeIssueContentHash,
   PatternConflictJudge,
@@ -539,6 +544,125 @@ resolver.define('seedSampleData', async () => {
   return {
     seededDecisions: sampleDecisions.length,
     seededCandidates: sampleCandidates.length,
+  };
+});
+
+resolver.define('runExtractionScan', async ({ context }) => {
+  const settings = await settingsRepository.get();
+  const extractor = new HeuristicDecisionExtractor();
+  const existingCandidates = await candidates.list({ limit: 100 });
+  const proposals: DecisionProposal[] = [];
+  let scannedPages = 0;
+  let scannedIssues = 0;
+
+  for (const spaceId of settings?.includedSpaceIds ?? []) {
+    try {
+      const confRes = await api
+        .asUser()
+        .requestConfluence(route`/wiki/api/v2/pages?space-id=${spaceId}&limit=10&body-format=storage`);
+      if (confRes.ok) {
+        const pageData = (await confRes.json()) as {
+          results?: Array<{
+            id: string;
+            title: string;
+            body?: { storage?: { value?: string } };
+            _links?: { webui?: string };
+          }>;
+        };
+        for (const page of pageData.results ?? []) {
+          scannedPages += 1;
+          const body = page.body?.storage?.value ?? '';
+          const extracted = await extractor.extract(body, {
+            type: 'page',
+            id: String(page.id),
+            url: page._links?.webui ?? `https://confluence.example.com/pages/${page.id}`,
+            spaceKey: spaceId,
+          });
+          proposals.push(...extracted);
+        }
+      }
+    } catch {
+      // safe partial failure
+    }
+  }
+
+  for (const projectId of settings?.includedProjectIds ?? []) {
+    try {
+      const jiraRes = await api
+        .asUser()
+        .requestJira(
+          route`/rest/api/3/search?jql=project=${projectId} order by updated desc&maxResults=10&fields=summary,description,comment`,
+        );
+      if (jiraRes.ok) {
+        const jiraData = (await jiraRes.json()) as {
+          issues?: Array<{
+            id: string;
+            key: string;
+            fields?: {
+              summary?: string;
+              description?: unknown;
+              comment?: { comments?: Array<{ id: string; body?: unknown }> };
+            };
+          }>;
+        };
+        for (const issue of jiraData.issues ?? []) {
+          scannedIssues += 1;
+          const desc = extractAdfText(issue.fields?.description);
+          if (desc) {
+            const extracted = await extractor.extract(desc, {
+              type: 'comment',
+              id: issue.key,
+              url: `https://jira.example.com/browse/${issue.key}`,
+              projectId,
+            });
+            proposals.push(...extracted);
+          }
+          for (const comm of issue.fields?.comment?.comments ?? []) {
+            const commText = extractAdfText(comm.body);
+            if (commText) {
+              const extracted = await extractor.extract(commText, {
+                type: 'comment',
+                id: `${issue.key}#${comm.id}`,
+                url: `https://jira.example.com/browse/${issue.key}#comment-${comm.id}`,
+                projectId,
+              });
+              proposals.push(...extracted);
+            }
+          }
+        }
+      }
+    } catch {
+      // safe partial failure
+    }
+  }
+
+  const newCandidates = buildIdempotentCandidates(proposals, existingCandidates.items);
+  for (const cand of newCandidates) {
+    await candidates.put(cand);
+  }
+
+  const actor = await getActorId(context);
+  if (newCandidates.length > 0) {
+    await auditLogs.put({
+      id: `audit_scan_${Date.now().toString(36)}`,
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      actor,
+      action: 'run_extraction_scan',
+      targetType: 'candidate',
+      targetId: 'batch',
+      after: {
+        scannedPages,
+        scannedIssues,
+        newCandidatesCount: newCandidates.length,
+      },
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  return {
+    scannedPages,
+    scannedIssues,
+    newCandidatesCount: newCandidates.length,
   };
 });
 

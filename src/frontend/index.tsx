@@ -202,6 +202,26 @@ function App() {
     }
   }
 
+  async function handleRunScan() {
+    setActionInProgress('scan');
+    setGlobalError(null);
+    try {
+      const res = await invoke<{
+        scannedPages: number;
+        scannedIssues: number;
+        newCandidatesCount: number;
+      }>('runExtractionScan');
+      setBannerMessage(
+        `Scan complete! Examined ${res.scannedPages} page(s) and ${res.scannedIssues} issue(s). Found ${res.newCandidatesCount} new candidate decision(s).`,
+      );
+      await Promise.all([loadCandidates(), refreshStats()]);
+    } catch (err) {
+      setGlobalError(errorMessage(err));
+    } finally {
+      setActionInProgress(null);
+    }
+  }
+
   async function handleSeedDemoData() {
     setActionInProgress('seed');
     setGlobalError(null);
@@ -249,6 +269,12 @@ function App() {
               <Text>Living organizational memory & decision contradiction prevention</Text>
             </Stack>
             <Inline space="space.100" alignBlock="center">
+              <Button
+                isDisabled={actionInProgress === 'scan'}
+                onClick={() => void handleRunScan()}
+              >
+                {actionInProgress === 'scan' ? 'Scanning…' : 'Scan for decisions'}
+              </Button>
               <Button
                 appearance="subtle"
                 isDisabled={actionInProgress === 'seed'}

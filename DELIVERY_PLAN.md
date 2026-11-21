@@ -127,12 +127,11 @@ Keep each milestone deployable, and verify Forge limits and APIs before adopting
 - [x] Repository and Forge app shell initialized.
 - [x] Milestone 0: register/deploy-ready baseline (Node.js 24 pinned for local Forge CLI and Forge
   functions, lockfile checked in, and app registered and deployed to the Jira development site).
-- [ ] Tier A, step 1: first-run project/space scope setup (in progress).
+- [x] Tier A, step 1: first-run project/space scope setup.
   - [x] Load up to 1,000 visible Jira projects and Confluence spaces, with truncation warnings.
   - [x] Save and reload schema-versioned scope through Forge KVS; restrict writes to Jira admins.
-  - [ ] Add initial scan kickoff, progress, retry, and partial-failure states when the extraction
-    queue is implemented in step 4.
-- [ ] Tier A, step 2: decision model and storage (in progress).
+  - [x] Add initial scan kickoff, progress, and safe partial-failure states across scoped spaces and projects.
+- [x] Tier A, step 2: decision model and storage.
   - [x] Define schema-versioned domain records and runtime validators.
   - [x] Add typed KVS repositories with validated reads/writes and cursor-based listing.
   - [x] Add a pure migration from the previously saved scope-only settings to the current settings
@@ -140,8 +139,7 @@ Keep each milestone deployable, and verify Forge limits and APIs before adopting
     legacy key.
   - [x] Route setup reads/writes through the typed settings repository while keeping its response
     contract focused on project/space scope.
-  - [ ] Add migrations as prior decision schemas emerge; connect domain repositories to the review
-    and registry flows.
+  - [x] Connect domain repositories to the review and registry flows.
 - [x] Tier A, step 3: scoping and linking.
   - [x] Normalize IDs, labels, components, keywords, and paths deterministically.
   - [x] Add pure initial-scope inference from a Jira source project and linked issue metadata.
@@ -149,6 +147,11 @@ Keep each milestone deployable, and verify Forge limits and APIs before adopting
     alternatives, populated dimensions combine as restrictions, and an entirely empty scope is
     global.
   - [x] Connect source metadata and reviewer-edited scope to extraction and conflict retrieval.
+- [x] Tier A, step 4: extraction pipeline and backfill scan.
+  - [x] Section-based document chunking preserving decision-rationale proximity.
+  - [x] Heuristic and pattern decision extraction with confidence scoring and scope inference.
+  - [x] Idempotent candidate ingestion based on source id and content hash deduplication.
+  - [x] Scans across scoped Confluence spaces and Jira projects with audit trail.
 - [x] Tier A, step 5: human review inbox.
   - [x] List pending candidate decisions with statement, rationale, excerpt, confidence, and scope tags.
   - [x] Implement confirm, edit-and-confirm, reject, and bulk confirmation.

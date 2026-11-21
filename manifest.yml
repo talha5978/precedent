@@ -47,3 +47,4 @@ permissions:
     - read:application-role:jira
     - read:permission:jira
     - read:space:confluence
+    - read:page:confluence
