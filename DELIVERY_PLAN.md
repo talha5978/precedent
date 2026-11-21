@@ -142,3 +142,10 @@ Keep each milestone deployable, and verify Forge limits and APIs before adopting
     contract focused on project/space scope.
   - [ ] Add migrations as prior decision schemas emerge; connect domain repositories to the review
     and registry flows.
+- [ ] Tier A, step 3: scoping and linking (in progress).
+  - [x] Normalize IDs, labels, components, keywords, and paths deterministically.
+  - [x] Add pure initial-scope inference from a Jira source project and linked issue metadata.
+  - [x] Define matching semantics: empty dimensions are unrestricted, values in a dimension are
+    alternatives, populated dimensions combine as restrictions, and an entirely empty scope is
+    global.
+  - [ ] Connect source metadata and reviewer-edited scope to extraction and conflict retrieval.
