@@ -8,7 +8,7 @@
     "install:site": "forge install",
     "dev": "forge tunnel",
     "typecheck": "tsc --noEmit",
-    "test": "node --test --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/**/*.test.ts"
+    "test": "node --test --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --disable-warning=DEP0205 --import ./scripts/register-loader.mjs src/**/*.test.ts"
   },
   "dependencies": {
     "@forge/api": "^8.5.0",
