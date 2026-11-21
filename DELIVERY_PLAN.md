@@ -128,7 +128,7 @@ Keep each milestone deployable, and verify Forge limits and APIs before adopting
 - [ ] Milestone 0: register/deploy-ready baseline (blocked on Node.js 20+, package installation,
   and Atlassian app registration; installed Forge CLI currently rejects local Node.js 18).
 - [ ] Tier A, step 1: first-run project/space scope setup (in progress).
-  - [x] Load up to 5,000 visible Jira projects and Confluence spaces, with truncation warnings.
+  - [x] Load up to 1,000 visible Jira projects and Confluence spaces, with truncation warnings.
   - [x] Save and reload schema-versioned scope through Forge KVS; restrict writes to Jira admins.
   - [ ] Add initial scan kickoff, progress, retry, and partial-failure states when the extraction
     queue is implemented in step 4.
