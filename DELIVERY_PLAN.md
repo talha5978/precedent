@@ -132,3 +132,8 @@ Keep each milestone deployable, and verify Forge limits and APIs before adopting
   - [x] Save and reload schema-versioned scope through Forge KVS; restrict writes to Jira admins.
   - [ ] Add initial scan kickoff, progress, retry, and partial-failure states when the extraction
     queue is implemented in step 4.
+- [ ] Tier A, step 2: decision model and storage (in progress).
+  - [x] Define schema-versioned domain records and runtime validators.
+  - [x] Add typed KVS repositories with validated reads/writes and cursor-based listing.
+  - [ ] Add explicit migrations when a prior persisted decision schema needs upgrading; connect
+    domain repositories to the review and registry flows.
