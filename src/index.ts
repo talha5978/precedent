@@ -1,6 +1,14 @@
 import api, { route } from '@forge/api';
 import Resolver from '@forge/resolver';
-import { auditLogs, candidates, decisions, settingsRepository } from './storage/repositories';
+import {
+  auditLogs,
+  candidates,
+  decisions,
+  relations,
+  resolutions,
+  settingsRepository,
+  verdicts,
+} from './storage/repositories';
 import {
   type ProjectOption,
   type SetupOptions,
@@ -14,11 +22,24 @@ import {
   rejectCandidateProposal,
 } from './domain/decisions';
 import {
+  CURRENT_SCHEMA_VERSION,
   type CandidateStatus,
+  type Decision,
   type DecisionScope,
   type DecisionStatus,
+  type Resolution,
+  type Verdict,
 } from './domain/models';
 import { getSampleCandidates, getSampleDecisions } from './domain/sampleData';
+import {
+  computeIssueContentHash,
+  PatternConflictJudge,
+  resolveWithComply,
+  resolveWithException,
+  resolveWithSupersede,
+  retrieveCandidateDecisions,
+  type IssueInput,
+} from './domain/conflict';
 
 const resolver = new Resolver();
 const DEFAULT_SETTINGS = {
@@ -42,6 +63,23 @@ type ConfluenceSpacePage = {
   results?: Array<{ id: string | number; key: string; name: string }>;
   _links?: { next?: string };
 };
+
+function extractAdfText(doc: unknown): string {
+  if (typeof doc === 'string') return doc;
+  if (!doc || typeof doc !== 'object') return '';
+  let text = '';
+  function walk(node: unknown) {
+    if (node && typeof node === 'object') {
+      const rec = node as Record<string, unknown>;
+      if (typeof rec.text === 'string') text += ` ${rec.text}`;
+      if (Array.isArray(rec.content)) {
+        for (const child of rec.content) walk(child);
+      }
+    }
+  }
+  walk(doc);
+  return text.trim();
+}
 
 async function getActorId(context?: { accountId?: string }): Promise<string> {
   if (context?.accountId) return context.accountId;
@@ -305,6 +343,166 @@ resolver.define('getDecision', async ({ payload }) => {
   const decision = await decisions.get(input.id);
   if (!decision) throw new Error(`Decision "${input.id}" not found.`);
   return decision;
+});
+
+// --- Conflict Detection Engine & Issue Panel Resolvers ---
+
+type IssueFieldsResponse = {
+  fields?: {
+    summary?: string;
+    description?: unknown;
+    components?: Array<{ name?: string }>;
+    labels?: string[];
+  };
+};
+
+resolver.define('evaluateIssue', async ({ payload, context }) => {
+  const issueKey =
+    (payload as { issueKey?: string } | undefined)?.issueKey ||
+    (context as { extension?: { issue?: { key?: string } } })?.extension?.issue?.key;
+
+  if (!issueKey) throw new Error('Issue key is required to check conflicts.');
+
+  let summary = '';
+  let description = '';
+  let components: string[] = [];
+  let labels: string[] = [];
+
+  try {
+    const jiraRes = await api
+      .asUser()
+      .requestJira(route`/rest/api/3/issue/${issueKey}?fields=summary,description,components,labels`);
+    if (jiraRes.ok) {
+      const data = (await jiraRes.json()) as IssueFieldsResponse;
+      summary = data.fields?.summary ?? '';
+      description = extractAdfText(data.fields?.description);
+      components = (data.fields?.components ?? [])
+        .map((c) => c.name)
+        .filter((n): n is string => typeof n === 'string');
+      labels = data.fields?.labels ?? [];
+    }
+  } catch {
+    // If running in development/mock environment, provide fallback
+    summary = `Issue ${issueKey}`;
+  }
+
+  const issueInput: IssueInput = {
+    key: issueKey,
+    summary,
+    description,
+    components,
+    labels,
+  };
+
+  const contentHash = computeIssueContentHash(issueInput);
+  const allDecisions = await decisions.list({ limit: 100 });
+  const activeDecisions = allDecisions.items.filter((d) => d.status === 'active');
+
+  const candidatesToJudge = retrieveCandidateDecisions(activeDecisions, issueInput, 5);
+  const judge = new PatternConflictJudge();
+
+  const conflictItems: Array<{ verdict: Verdict; decision: Decision; resolution?: Resolution }> = [];
+
+  for (const dec of candidatesToJudge) {
+    const judgment = await judge.judge(dec, issueInput);
+    if (judgment.verdict !== 'no_conflict') {
+      const verdictId = `v_${issueKey}_${dec.id}`;
+      let verdict = await verdicts.get(verdictId);
+
+      if (!verdict || verdict.issueContentHash !== contentHash) {
+        verdict = {
+          id: verdictId,
+          schemaVersion: CURRENT_SCHEMA_VERSION,
+          issueKey,
+          decisionId: dec.id,
+          verdict: judgment.verdict,
+          confidence: judgment.confidence,
+          explanation: judgment.explanation,
+          triggeringPhrases: judgment.triggeringPhrases,
+          issueContentHash: contentHash,
+          createdAt: new Date().toISOString(),
+          modelVersion: 'pattern-v1',
+        };
+        await verdicts.put(verdict);
+      }
+
+      // Check if resolution exists
+      const resolution = await resolutions.get(`res_${verdict.id}`);
+      conflictItems.push({ verdict, decision: dec, resolution });
+    }
+  }
+
+  return {
+    issueKey,
+    hasConflicts: conflictItems.some((c) => c.verdict.verdict === 'conflict'),
+    hasPossibleConflicts: conflictItems.some((c) => c.verdict.verdict === 'possible_conflict'),
+    conflicts: conflictItems,
+  };
+});
+
+resolver.define('resolveConflict', async ({ payload, context }) => {
+  const input = payload as {
+    verdictId: string;
+    action: 'comply' | 'supersede' | 'exception';
+    note: string;
+    newStatement?: string;
+    newRationale?: string;
+    exceptionExpiry?: string;
+  };
+
+  if (!input?.verdictId) throw new Error('Verdict ID is required.');
+  const verdict = await verdicts.get(input.verdictId);
+  if (!verdict) throw new Error(`Verdict "${input.verdictId}" not found.`);
+
+  const actor = await getActorId(context);
+
+  if (input.action === 'comply') {
+    const { resolution, auditLog } = resolveWithComply(verdict, actor, input.note);
+    // Key resolution with res_{verdictId} for deterministic lookup
+    resolution.id = `res_${verdict.id}`;
+    await Promise.all([resolutions.put(resolution), auditLogs.put(auditLog)]);
+    return { resolution };
+  }
+
+  if (input.action === 'supersede') {
+    if (!input.newStatement) throw new Error('New statement required to supersede decision.');
+    const oldDecision = await decisions.get(verdict.decisionId);
+    if (!oldDecision) throw new Error(`Prior decision "${verdict.decisionId}" not found.`);
+
+    const result = resolveWithSupersede(
+      verdict,
+      oldDecision,
+      input.newStatement,
+      input.newRationale ?? '',
+      actor,
+    );
+
+    result.resolution.id = `res_${verdict.id}`;
+
+    await Promise.all([
+      decisions.put(result.newDecision),
+      decisions.put(result.supersededDecision),
+      relations.put(result.relation),
+      resolutions.put(result.resolution),
+      auditLogs.put(result.auditLog),
+    ]);
+
+    return { resolution: result.resolution, newDecision: result.newDecision };
+  }
+
+  if (input.action === 'exception') {
+    const { resolution, auditLog } = resolveWithException(
+      verdict,
+      actor,
+      input.note,
+      input.exceptionExpiry ?? '2026-06-01',
+    );
+    resolution.id = `res_${verdict.id}`;
+    await Promise.all([resolutions.put(resolution), auditLogs.put(auditLog)]);
+    return { resolution };
+  }
+
+  throw new Error(`Unsupported resolution action: ${String(input.action)}`);
 });
 
 // --- Stats & Demo Seeding ---

@@ -6,12 +6,21 @@ modules:
         function: resolver
       render: native
       title: Precedent
+  jira:issuePanel:
+    - key: precedent-issue-panel
+      resource: issue-panel
+      resolver:
+        function: resolver
+      render: native
+      title: Precedent Decisions
   function:
     - key: resolver
       handler: index.handler
 resources:
   - key: main
     path: src/frontend/index.tsx
+  - key: issue-panel
+    path: src/frontend/issuePanel.tsx
 app:
   id: ari:cloud:ecosystem::app/f51ef525-93ce-41d8-8060-d45ee86d2c43
   compatibility:
@@ -24,6 +33,7 @@ app:
 permissions:
   scopes:
     - storage:app
+    - read:jira-work
     - read:avatar:jira
     - read:group:jira
     - read:issue-type:jira

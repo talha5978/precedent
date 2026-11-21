@@ -142,7 +142,7 @@ Keep each milestone deployable, and verify Forge limits and APIs before adopting
     contract focused on project/space scope.
   - [ ] Add migrations as prior decision schemas emerge; connect domain repositories to the review
     and registry flows.
-- [ ] Tier A, step 3: scoping and linking (in progress).
+- [x] Tier A, step 3: scoping and linking.
   - [x] Normalize IDs, labels, components, keywords, and paths deterministically.
   - [x] Add pure initial-scope inference from a Jira source project and linked issue metadata.
   - [x] Define matching semantics: empty dimensions are unrestricted, values in a dimension are
@@ -157,3 +157,16 @@ Keep each milestone deployable, and verify Forge limits and APIs before adopting
   - [x] Filterable and searchable registry by status (active, superseded, under review), query, and scope.
   - [x] Detailed decision view with full rationale, source attribution, quote, and governed dimensions.
   - [x] Seed sample data action for instant testing and evaluation of realistic engineering decisions.
+- [x] Tier A, step 7: conflict detection engine.
+  - [x] Two-stage pipeline: Stage 1 multi-dimensional retrieval & lexical scoring; Stage 2 conflict judgment.
+  - [x] Deterministic issue content-hash caching to avoid redundant evaluations.
+  - [x] Calibrated verdicts (`conflict`, `possible_conflict`, `no_conflict`) with triggering phrases and explanations.
+- [x] Tier A, step 8: Jira issue warning panel.
+  - [x] Registered native `jira:issuePanel` module in `manifest.yml` with `read:jira-work` scope.
+  - [x] Issue view UI displaying detected contradictions, match confidence, prior rationale, and source citation.
+  - [x] Loading, clean ("All Clear"), error, and resolution states.
+- [x] Tier A, step 9: resolution workflows.
+  - [x] Comply action: author records plan adjustment note.
+  - [x] Supersede action: records new decision statement and rationale, links lineage (`supersedes`), and updates status.
+  - [x] Exception action: time-boxed exception with justification and expiry date.
+  - [x] Full mutation audit trail in `auditLogs` and `resolutions` repositories.
