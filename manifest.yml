@@ -1,0 +1,19 @@
+modules:
+  jira:globalPage:
+    - key: precedent-home
+      resolver:
+        function: resolver
+      title: Precedent
+  function:
+    - key: resolver
+      handler: index.handler
+app:
+  id: ari:cloud:ecosystem::app/00000000-0000-4000-8000-000000000001
+  runtime:
+    name: nodejs20.x
+permissions:
+  scopes:
+    - storage:app
+  content:
+    styles:
+      - unsafe-inline
