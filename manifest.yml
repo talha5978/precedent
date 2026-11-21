@@ -14,9 +14,65 @@ modules:
       render: native
       title: Precedent Decisions
       icon: https://developer.atlassian.com/platform/forge/images/icons/issue-panel-icon.svg
+  rovo:agent:
+    - key: precedent-agent
+      name: Precedent Decision Agent
+      description: Answers architectural and engineering decision questions with cited sources, searches the decision registry, traces decision lineage, and checks issues for contradictions.
+      prompt: >
+        You are Precedent, the organizational memory and decision governance agent for engineering teams.
+        Your role is to help engineers, architects, and new joiners understand why decisions were made,
+        trace supersession and dependency lineage, and verify whether proposed work contradicts existing decisions.
+        Follow these core rules:
+        1. Evidence over assertion: Always cite the source (Confluence page, ADR, or Jira comment) and quoted excerpt provided by the actions.
+        2. Honest uncertainty: If a decision lacks an explicit rationale, state plainly "No explicit rationale recorded." If no decisions match, say so clearly.
+        3. Contradiction awareness: When users ask about proposed technologies or approaches, check active decisions for contradictions.
+      conversationStarters:
+        - "Why do we use PostgreSQL for primary storage?"
+        - "Search our decisions for database and caching guidelines"
+        - "Does my ticket plan conflict with any team decisions?"
+      actions:
+        - search-decisions-action
+        - get-decision-action
+        - check-issue-conflicts-action
+  action:
+    - key: search-decisions-action
+      name: Search Decisions
+      function: rovoActionHandler
+      actionVerb: GET
+      description: Searches the Precedent decision registry for active, superseded, or historical decisions matching keywords, technologies, components, or projects.
+      inputs:
+        query:
+          title: Search Query
+          type: string
+          required: true
+          description: Keywords, component names, or technologies to search for (e.g. 'postgres', 'redis', 'graphql').
+    - key: get-decision-action
+      name: Get Decision Details and Lineage
+      function: rovoActionHandler
+      actionVerb: GET
+      description: Retrieves full details of a specific decision including its statement, rationale, owner, source citation, and supersedes/depends-on lineage.
+      inputs:
+        id:
+          title: Decision ID
+          type: string
+          required: true
+          description: The unique identifier of the decision (e.g. 'dec_sample_postgres').
+    - key: check-issue-conflicts-action
+      name: Check Issue for Decision Contradictions
+      function: rovoActionHandler
+      actionVerb: GET
+      description: Evaluates a Jira issue's summary and description against active team decisions to detect architectural contradictions or policy violations.
+      inputs:
+        issueKey:
+          title: Jira Issue Key
+          type: string
+          required: true
+          description: The Jira issue key to evaluate (e.g. 'PROJ-123').
   function:
     - key: resolver
       handler: index.handler
+    - key: rovoActionHandler
+      handler: index.rovoHandler
 resources:
   - key: main
     path: src/frontend/index.tsx

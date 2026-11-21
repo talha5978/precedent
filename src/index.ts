@@ -844,4 +844,41 @@ resolver.define('runExtractionScan', async ({ context }) => {
   };
 });
 
+import {
+  handleCheckIssueConflicts,
+  handleGetDecision,
+  handleSearchDecisions,
+} from './rovoActions';
+
 export const handler = resolver.getDefinitions();
+
+export async function rovoHandler(payload: any, context: any) {
+  const moduleKey = context?.moduleKey || payload?.context?.moduleKey;
+
+  if (moduleKey === 'search-decisions-action') {
+    return handleSearchDecisions(payload);
+  }
+
+  if (moduleKey === 'get-decision-action') {
+    return handleGetDecision(payload);
+  }
+
+  if (moduleKey === 'check-issue-conflicts-action') {
+    return handleCheckIssueConflicts(payload);
+  }
+
+  // Fallback: match by payload keys if moduleKey wasn't passed directly
+  if (payload?.query !== undefined) {
+    return handleSearchDecisions(payload);
+  }
+  if (payload?.id !== undefined) {
+    return handleGetDecision(payload);
+  }
+  if (payload?.issueKey !== undefined) {
+    return handleCheckIssueConflicts(payload);
+  }
+
+  return {
+    error: `Unknown action invoked or missing required parameters.`,
+  };
+}
