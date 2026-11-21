@@ -135,5 +135,10 @@ Keep each milestone deployable, and verify Forge limits and APIs before adopting
 - [ ] Tier A, step 2: decision model and storage (in progress).
   - [x] Define schema-versioned domain records and runtime validators.
   - [x] Add typed KVS repositories with validated reads/writes and cursor-based listing.
-  - [ ] Add explicit migrations when a prior persisted decision schema needs upgrading; connect
-    domain repositories to the review and registry flows.
+  - [x] Add a pure migration from the previously saved scope-only settings to the current settings
+    schema, preserving selected projects/spaces and writing the upgraded record before removing the
+    legacy key.
+  - [x] Route setup reads/writes through the typed settings repository while keeping its response
+    contract focused on project/space scope.
+  - [ ] Add migrations as prior decision schemas emerge; connect domain repositories to the review
+    and registry flows.

@@ -1,4 +1,5 @@
 export const CURRENT_SCHEMA_VERSION = 1 as const;
+export const CURRENT_SETTINGS_SCHEMA_VERSION = 2 as const;
 
 export type DecisionStatus = 'active' | 'superseded' | 'expired' | 'under_review';
 export type CandidateStatus = 'pending' | 'confirmed' | 'rejected' | 'merged';
@@ -115,7 +116,7 @@ export type AuditLog = {
 };
 
 export type Settings = {
-  schemaVersion: typeof CURRENT_SCHEMA_VERSION;
+  schemaVersion: typeof CURRENT_SETTINGS_SCHEMA_VERSION;
   includedProjectIds: string[];
   includedSpaceIds: string[];
   confidenceThreshold: number;
@@ -325,7 +326,7 @@ export function parseAuditLog(value: unknown): AuditLog | undefined {
 }
 
 export function parseSettings(value: unknown): Settings | undefined {
-  if (!isRecord(value) || value.schemaVersion !== CURRENT_SCHEMA_VERSION) return undefined;
+  if (!isRecord(value) || value.schemaVersion !== CURRENT_SETTINGS_SCHEMA_VERSION) return undefined;
   if (
     !isStringArray(value.includedProjectIds) ||
     !isStringArray(value.includedSpaceIds) ||
@@ -343,4 +344,30 @@ export function parseSettings(value: unknown): Settings | undefined {
     return undefined;
   }
   return value as Settings;
+}
+
+/** Upgrade the original scope-only settings record while preserving its selections. */
+export function migrateSettings(value: unknown): Settings | undefined {
+  const current = parseSettings(value);
+  if (current) return current;
+  if (!isRecord(value) || value.schemaVersion !== 1) return undefined;
+  if (
+    !isStringArray(value.includedProjectIds) ||
+    !isStringArray(value.includedSpaceIds) ||
+    !isIsoDate(value.updatedAt)
+  ) {
+    return undefined;
+  }
+
+  return {
+    schemaVersion: CURRENT_SETTINGS_SCHEMA_VERSION,
+    includedProjectIds: value.includedProjectIds,
+    includedSpaceIds: value.includedSpaceIds,
+    confidenceThreshold: 0.8,
+    possibleConflictThreshold: 0.55,
+    supersederRoleIds: [],
+    exceptionApproverRoleIds: [],
+    notifications: { enabled: false, ownerAlerts: false, dependentAlerts: false },
+    updatedAt: value.updatedAt,
+  };
 }

@@ -1,8 +1,7 @@
 import api, { route } from '@forge/api';
-import { kvs } from '@forge/kvs';
 import Resolver from '@forge/resolver';
+import { settingsRepository } from './storage/repositories';
 import {
-  parseSetupSettings,
   type ProjectOption,
   type SetupOptions,
   type SetupSettings,
@@ -10,7 +9,17 @@ import {
 } from './domain/setup';
 
 const resolver = new Resolver();
-const SETTINGS_KEY = 'settings:setup';
+const DEFAULT_SETTINGS = {
+  schemaVersion: 2 as const,
+  includedProjectIds: [] as string[],
+  includedSpaceIds: [] as string[],
+  confidenceThreshold: 0.8,
+  possibleConflictThreshold: 0.55,
+  supersederRoleIds: [] as string[],
+  exceptionApproverRoleIds: [] as string[],
+  notifications: { enabled: false, ownerAlerts: false, dependentAlerts: false },
+  updatedAt: new Date(0).toISOString(),
+};
 
 type JiraProjectPage = {
   values?: Array<{ id: string | number; key: string; name: string }>;
@@ -89,11 +98,10 @@ async function loadSetupOptions(): Promise<SetupOptions> {
 }
 
 resolver.define('getSetup', async () => {
-  const [options, stored] = await Promise.all([
+  const [options, savedSettings] = await Promise.all([
     loadSetupOptions(),
-    kvs.get<unknown>(SETTINGS_KEY),
+    settingsRepository.get(),
   ]);
-  const savedSettings = parseSetupSettings(stored);
   const visibleProjects = new Set(options.projects.map(({ id }) => id));
   const visibleSpaces = new Set(options.spaces.map(({ id }) => id));
 
@@ -101,9 +109,10 @@ resolver.define('getSetup', async () => {
     options,
     settings: savedSettings
       ? {
-          ...savedSettings,
+          schemaVersion: 1 as const,
           includedProjectIds: savedSettings.includedProjectIds.filter((id) => visibleProjects.has(id)),
           includedSpaceIds: savedSettings.includedSpaceIds.filter((id) => visibleSpaces.has(id)),
+          updatedAt: savedSettings.updatedAt,
         }
       : undefined,
   };
@@ -148,15 +157,21 @@ resolver.define('saveSetup', async ({ payload }) => {
     throw new Error('One or more selected Confluence spaces are unavailable to your account.');
   }
 
-  const settings: SetupSettings = {
-    schemaVersion: 1,
+  const existing = await settingsRepository.get();
+  const settings = {
+    ...(existing ?? DEFAULT_SETTINGS),
     includedProjectIds,
     includedSpaceIds,
     updatedAt: new Date().toISOString(),
   };
 
-  await kvs.set(SETTINGS_KEY, settings);
-  return settings;
+  await settingsRepository.put(settings);
+  return {
+    schemaVersion: 1 as const,
+    includedProjectIds,
+    includedSpaceIds,
+    updatedAt: settings.updatedAt,
+  } satisfies SetupSettings;
 });
 
 export const handler = resolver.getDefinitions();

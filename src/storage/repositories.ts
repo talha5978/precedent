@@ -5,6 +5,7 @@ import {
   parseDecision,
   parseDecisionRelation,
   parseFeedback,
+  migrateSettings,
   parseResolution,
   parseSettings,
   parseVerdict,
@@ -130,11 +131,24 @@ export const feedback: RecordRepository<Feedback> = createRecordRepository('feed
 export const auditLogs: RecordRepository<AuditLog> = createRecordRepository('audit-logs', parseAuditLog);
 
 const SETTINGS_KEY = `${STORAGE_PREFIX}:settings:global`;
+const LEGACY_SETTINGS_KEY = 'settings:setup';
 
 export const settingsRepository = {
   async get(): Promise<Settings | undefined> {
-    const value = await kvs.get<unknown>(SETTINGS_KEY);
-    return value === undefined ? undefined : requireParsed('settings', 'global', value, parseSettings);
+    const current = await kvs.get<unknown>(SETTINGS_KEY);
+    if (current !== undefined) {
+      return requireParsed('settings', 'global', current, parseSettings);
+    }
+
+    const legacy = await kvs.get<unknown>(LEGACY_SETTINGS_KEY);
+    if (legacy === undefined) return undefined;
+    const migrated = migrateSettings(legacy);
+    if (!migrated) throw new InvalidStoredRecordError('settings', 'legacy-setup');
+
+    // Write the new record before deleting the old one, so a failed write cannot lose scope.
+    await kvs.set(SETTINGS_KEY, migrated);
+    await kvs.delete(LEGACY_SETTINGS_KEY);
+    return migrated;
   },
 
   async put(settings: Settings): Promise<void> {
