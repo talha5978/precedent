@@ -18,9 +18,47 @@ import ForgeReconciler, {
 } from '@forge/react';
 import { invoke } from '@forge/bridge';
 import { toSetupOption, type SetupOptions, type SetupSettings } from '../domain/setup';
-import type { Candidate, Decision, DecisionStatus } from '../domain/models';
+import type { Candidate, Decision, DecisionRelation, DecisionStatus } from '../domain/models';
 
-type TabKey = 'registry' | 'inbox' | 'setup';
+type TabKey = 'registry' | 'inbox' | 'lineage' | 'dashboard' | 'setup';
+
+type DashboardStats = {
+  decisions: {
+    total: number;
+    active: number;
+    superseded: number;
+    underReview: number;
+    expired: number;
+  };
+  candidates: {
+    total: number;
+    pending: number;
+    confirmed: number;
+    rejected: number;
+  };
+  conflicts: {
+    conflictsDetected: number;
+    possibleConflicts: number;
+    totalEvaluated: number;
+  };
+  resolutions: {
+    total: number;
+    comply: number;
+    supersede: number;
+    exception: number;
+    resolutionRate: number;
+  };
+  relations: {
+    total: number;
+    supersedes: number;
+    dependsOn: number;
+  };
+  topViolated: Array<{
+    decisionId: string;
+    statement: string;
+    violationCount: number;
+  }>;
+};
 
 type StatsResponse = {
   totalDecisions: number;
@@ -81,6 +119,19 @@ function App() {
   const [savingSetup, setSavingSetup] = useState(false);
   const [setupSaved, setSetupSaved] = useState(false);
 
+  // Lineage state
+  const [lineageDecisions, setLineageDecisions] = useState<Decision[]>([]);
+  const [lineageRelations, setLineageRelations] = useState<DecisionRelation[]>([]);
+  const [loadingLineage, setLoadingLineage] = useState(false);
+  const [selectedLineageId, setSelectedLineageId] = useState<string | null>(null);
+
+  // Dashboard state
+  const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
+  const [loadingDashboard, setLoadingDashboard] = useState(false);
+
+  // Feedback state: map of candidate/verdict ID to submitted status
+  const [feedbackSubmitted, setFeedbackSubmitted] = useState<Record<string, boolean>>({});
+
   // Global status/messages
   const [globalError, setGlobalError] = useState<string | null>(null);
   const [bannerMessage, setBannerMessage] = useState<string | null>(null);
@@ -136,6 +187,51 @@ function App() {
     }
   }
 
+  async function loadLineage(decisionId?: string) {
+    setLoadingLineage(true);
+    setGlobalError(null);
+    try {
+      const res = await invoke<{
+        decisions: Decision[];
+        relations: DecisionRelation[];
+        focusDecisionId?: string;
+      }>('getDecisionLineage', decisionId ? { decisionId } : {});
+      setLineageDecisions(res.decisions);
+      setLineageRelations(res.relations);
+    } catch (err) {
+      setGlobalError(errorMessage(err));
+    } finally {
+      setLoadingLineage(false);
+    }
+  }
+
+  async function loadDashboard() {
+    setLoadingDashboard(true);
+    setGlobalError(null);
+    try {
+      const res = await invoke<DashboardStats>('getDashboardStats');
+      setDashboardStats(res);
+    } catch (err) {
+      setGlobalError(errorMessage(err));
+    } finally {
+      setLoadingDashboard(false);
+    }
+  }
+
+  async function handleSubmitFeedback(
+    targetType: 'candidate' | 'verdict',
+    targetId: string,
+    helpful: boolean,
+  ) {
+    try {
+      await invoke('submitFeedback', { targetType, targetId, helpful });
+      setFeedbackSubmitted((prev) => ({ ...prev, [targetId]: true }));
+      setBannerMessage(helpful ? 'Thank you! Marked as helpful.' : 'Feedback recorded.');
+    } catch (err) {
+      setGlobalError(errorMessage(err));
+    }
+  }
+
   useEffect(() => {
     void refreshStats();
     void loadDecisions();
@@ -148,9 +244,13 @@ function App() {
       void loadDecisions();
     } else if (activeTab === 'inbox') {
       void loadCandidates();
+    } else if (activeTab === 'lineage') {
+      void loadLineage(selectedLineageId ?? undefined);
+    } else if (activeTab === 'dashboard') {
+      void loadDashboard();
     }
     void refreshStats();
-  }, [activeTab, statusFilter]);
+  }, [activeTab, statusFilter, selectedLineageId]);
 
   async function handleConfirmCandidate(cand: Candidate, customStatement?: string, customRationale?: string) {
     setActionInProgress(cand.id);
@@ -339,6 +439,22 @@ function App() {
             }}
           >
             Review Inbox ({stats.pendingCandidates})
+          </Button>
+          <Button
+            appearance={activeTab === 'lineage' ? 'primary' : 'subtle'}
+            onClick={() => {
+              setActiveTab('lineage');
+            }}
+          >
+            Decision Lineage
+          </Button>
+          <Button
+            appearance={activeTab === 'dashboard' ? 'primary' : 'subtle'}
+            onClick={() => {
+              setActiveTab('dashboard');
+            }}
+          >
+            Health Dashboard
           </Button>
           <Button
             appearance={activeTab === 'setup' ? 'primary' : 'subtle'}
@@ -597,31 +713,56 @@ function App() {
                         </Inline>
                       )}
 
-                      <Inline space="space.100">
-                        <Button
-                          appearance="primary"
-                          isDisabled={actionInProgress !== null}
-                          onClick={() => void handleConfirmCandidate(cand)}
-                        >
-                          Confirm
-                        </Button>
-                        <Button
-                          isDisabled={actionInProgress !== null}
-                          onClick={() => {
-                            setEditingCandidate(cand);
-                            setEditStatement(cand.proposal.statement);
-                            setEditRationale(cand.proposal.rationale);
-                          }}
-                        >
-                          Edit & Confirm
-                        </Button>
-                        <Button
-                          appearance="subtle"
-                          isDisabled={actionInProgress !== null}
-                          onClick={() => void handleRejectCandidate(cand)}
-                        >
-                          Reject
-                        </Button>
+                      <Inline space="space.100" alignBlock="center" spread="space-between">
+                        <Inline space="space.100">
+                          <Button
+                            appearance="primary"
+                            isDisabled={actionInProgress !== null}
+                            onClick={() => void handleConfirmCandidate(cand)}
+                          >
+                            Confirm
+                          </Button>
+                          <Button
+                            isDisabled={actionInProgress !== null}
+                            onClick={() => {
+                              setEditingCandidate(cand);
+                              setEditStatement(cand.proposal.statement);
+                              setEditRationale(cand.proposal.rationale);
+                            }}
+                          >
+                            Edit & Confirm
+                          </Button>
+                          <Button
+                            appearance="subtle"
+                            isDisabled={actionInProgress !== null}
+                            onClick={() => void handleRejectCandidate(cand)}
+                          >
+                            Reject
+                          </Button>
+                        </Inline>
+
+                        {/* Candidate Feedback */}
+                        <Inline space="space.050" alignBlock="center">
+                          <Text>Accurate proposal?</Text>
+                          {feedbackSubmitted[cand.id] ? (
+                            <Lozenge appearance="success">Feedback Saved</Lozenge>
+                          ) : (
+                            <Inline space="space.050">
+                              <Button
+                                appearance="subtle"
+                                onClick={() => void handleSubmitFeedback('candidate', cand.id, true)}
+                              >
+                                👍 Yes
+                              </Button>
+                              <Button
+                                appearance="subtle"
+                                onClick={() => void handleSubmitFeedback('candidate', cand.id, false)}
+                              >
+                                👎 No
+                              </Button>
+                            </Inline>
+                          )}
+                        </Inline>
                       </Inline>
                     </Stack>
                   </Box>
@@ -631,7 +772,229 @@ function App() {
           </Stack>
         )}
 
-        {/* TAB 3: SCOPE & SETUP */}
+        {/* TAB 3: DECISION LINEAGE (B1) */}
+        {activeTab === 'lineage' && (
+          <Stack space="space.250">
+            <Stack space="space.050">
+              <Heading as="h2">Decision Lineage & Relations</Heading>
+              <Text>
+                Trace supersession histories and architectural dependencies across your decisions.
+              </Text>
+            </Stack>
+
+            {loadingLineage ? (
+              <Box padding="space.200">
+                <Text>Loading decision graph…</Text>
+              </Box>
+            ) : lineageRelations.length === 0 && lineageDecisions.length === 0 ? (
+              <Box padding="space.300">
+                <Stack space="space.100">
+                  <Text>No decisions or relations recorded yet.</Text>
+                  <Text>Click "Seed demo data" above to populate sample architecture decisions and lineage.</Text>
+                </Stack>
+              </Box>
+            ) : (
+              <Stack space="space.200">
+                {/* Active Relations Overview */}
+                <Box padding="space.150" backgroundColor="color.background.neutral.subtle">
+                  <Inline space="space.200" alignBlock="center">
+                    <Inline space="space.050" alignBlock="center">
+                      <Text>Total Decisions:</Text>
+                      <Badge>{lineageDecisions.length}</Badge>
+                    </Inline>
+                    <Inline space="space.050" alignBlock="center">
+                      <Text>Supersedes Edges:</Text>
+                      <Badge appearance="important">
+                        {lineageRelations.filter((r) => r.type === 'supersedes').length}
+                      </Badge>
+                    </Inline>
+                    <Inline space="space.050" alignBlock="center">
+                      <Text>Depends-on Edges:</Text>
+                      <Badge appearance="added">
+                        {lineageRelations.filter((r) => r.type === 'depends_on').length}
+                      </Badge>
+                    </Inline>
+                  </Inline>
+                </Box>
+
+                {/* Graph Edges / Relations List */}
+                <Heading as="h3">Architectural Lineage Relations</Heading>
+                {lineageRelations.length === 0 ? (
+                  <Text>No relations recorded between current decisions.</Text>
+                ) : (
+                  <Stack space="space.150">
+                    {lineageRelations.map((rel) => {
+                      const fromDec = lineageDecisions.find((d) => d.id === rel.fromId);
+                      const toDec = lineageDecisions.find((d) => d.id === rel.toId);
+
+                      return (
+                        <Box
+                          key={rel.id}
+                          padding="space.150"
+                          backgroundColor="color.background.neutral.subtle"
+                        >
+                          <Stack space="space.100">
+                            <Inline space="space.100" alignBlock="center">
+                              <Lozenge
+                                appearance={rel.type === 'supersedes' ? 'removed' : 'inprogress'}
+                              >
+                                {rel.type.toUpperCase()}
+                              </Lozenge>
+                              <Text>
+                                created by {rel.createdBy} on {formatDate(rel.createdAt)}
+                              </Text>
+                            </Inline>
+
+                            <Inline space="space.100" alignBlock="center">
+                              <Box padding="space.100" backgroundColor="color.background.neutral">
+                                <Stack space="space.050">
+                                  <Text>
+                                    <Strong>From:</Strong> {fromDec ? fromDec.statement : rel.fromId}
+                                  </Text>
+                                  {fromDec && (
+                                    <Lozenge appearance={fromDec.status === 'active' ? 'success' : 'default'}>
+                                      {fromDec.status}
+                                    </Lozenge>
+                                  )}
+                                </Stack>
+                              </Box>
+
+                              <Text>→</Text>
+
+                              <Box padding="space.100" backgroundColor="color.background.neutral">
+                                <Stack space="space.050">
+                                  <Text>
+                                    <Strong>To:</Strong> {toDec ? toDec.statement : rel.toId}
+                                  </Text>
+                                  {toDec && (
+                                    <Lozenge appearance={toDec.status === 'active' ? 'success' : 'default'}>
+                                      {toDec.status}
+                                    </Lozenge>
+                                  )}
+                                </Stack>
+                              </Box>
+                            </Inline>
+
+                            {rel.reason && (
+                              <Text>
+                                <Strong>Lineage Rationale:</Strong> “{rel.reason}”
+                              </Text>
+                            )}
+                          </Stack>
+                        </Box>
+                      );
+                    })}
+                  </Stack>
+                )}
+              </Stack>
+            )}
+          </Stack>
+        )}
+
+        {/* TAB 4: HEALTH DASHBOARD (B6) */}
+        {activeTab === 'dashboard' && (
+          <Stack space="space.250">
+            <Stack space="space.050">
+              <Heading as="h2">Decision Health & Governance Dashboard</Heading>
+              <Text>
+                Real-time visibility into organizational memory health, violation hotspots, and resolution rates.
+              </Text>
+            </Stack>
+
+            {loadingDashboard || !dashboardStats ? (
+              <Box padding="space.200">
+                <Text>Loading dashboard metrics…</Text>
+              </Box>
+            ) : (
+              <Stack space="space.200">
+                {/* Metrics Cards */}
+                <Inline space="space.150">
+                  <Box padding="space.150" backgroundColor="color.background.neutral.subtle">
+                    <Stack space="space.050">
+                      <Text><Strong>Active Decisions</Strong></Text>
+                      <Heading as="h2">{dashboardStats.decisions.active}</Heading>
+                      <Text>{dashboardStats.decisions.total} total recorded</Text>
+                    </Stack>
+                  </Box>
+
+                  <Box padding="space.150" backgroundColor="color.background.neutral.subtle">
+                    <Stack space="space.050">
+                      <Text><Strong>Superseded / Rot</Strong></Text>
+                      <Heading as="h2">{dashboardStats.decisions.superseded}</Heading>
+                      <Text>{dashboardStats.relations.supersedes} formal supersessions</Text>
+                    </Stack>
+                  </Box>
+
+                  <Box padding="space.150" backgroundColor="color.background.neutral.subtle">
+                    <Stack space="space.050">
+                      <Text><Strong>Conflicts Intercepted</Strong></Text>
+                      <Heading as="h2">{dashboardStats.conflicts.conflictsDetected}</Heading>
+                      <Text>{dashboardStats.conflicts.possibleConflicts} possible warnings</Text>
+                    </Stack>
+                  </Box>
+
+                  <Box padding="space.150" backgroundColor="color.background.neutral.subtle">
+                    <Stack space="space.050">
+                      <Text><Strong>Resolution Rate</Strong></Text>
+                      <Heading as="h2">
+                        {Math.round(dashboardStats.resolutions.resolutionRate * 100)}%
+                      </Heading>
+                      <Text>{dashboardStats.resolutions.total} resolved conflicts</Text>
+                    </Stack>
+                  </Box>
+                </Inline>
+
+                {/* Resolution Breakdown */}
+                <Box padding="space.200" backgroundColor="color.background.neutral.subtle">
+                  <Stack space="space.100">
+                    <Heading as="h3">Conflict Resolution Distribution</Heading>
+                    <Inline space="space.200">
+                      <Inline space="space.050" alignBlock="center">
+                        <Lozenge appearance="success">Comply</Lozenge>
+                        <Text>{dashboardStats.resolutions.comply} (re-aligned to policy)</Text>
+                      </Inline>
+                      <Inline space="space.050" alignBlock="center">
+                        <Lozenge appearance="removed">Supersede</Lozenge>
+                        <Text>{dashboardStats.resolutions.supersede} (updated decision)</Text>
+                      </Inline>
+                      <Inline space="space.050" alignBlock="center">
+                        <Lozenge appearance="inprogress">Exception</Lozenge>
+                        <Text>{dashboardStats.resolutions.exception} (temporary waiver)</Text>
+                      </Inline>
+                    </Inline>
+                  </Stack>
+                </Box>
+
+                {/* Top Violated Decisions */}
+                <Stack space="space.100">
+                  <Heading as="h3">Top Contradiction Hotspots</Heading>
+                  {dashboardStats.topViolated.length === 0 ? (
+                    <Text>No decision violations recorded yet.</Text>
+                  ) : (
+                    <Stack space="space.100">
+                      {dashboardStats.topViolated.map((hotspot) => (
+                        <Box
+                          key={hotspot.decisionId}
+                          padding="space.100"
+                          backgroundColor="color.background.neutral.subtle"
+                        >
+                          <Inline space="space.100" alignBlock="center" spread="space-between">
+                            <Text>{hotspot.statement}</Text>
+                            <Lozenge appearance="removed">
+                              {hotspot.violationCount} conflict(s)
+                            </Lozenge>
+                          </Inline>
+                        </Box>
+                      ))}
+                    </Stack>
+                  )}
+                </Stack>
+              </Stack>
+            )}
+          </Stack>
+        )}
+
+        {/* TAB 5: SCOPE & SETUP */}
         {activeTab === 'setup' && (
           <Stack space="space.250">
             <Stack space="space.100">

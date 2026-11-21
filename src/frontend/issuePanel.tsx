@@ -50,6 +50,20 @@ function IssuePanel() {
   const [newRationale, setNewRationale] = useState('');
   const [exceptionExpiry, setExceptionExpiry] = useState('2026-06-01');
   const [submittingResolution, setSubmittingResolution] = useState(false);
+  const [feedbackSubmitted, setFeedbackSubmitted] = useState<Record<string, boolean>>({});
+
+  async function handleFeedback(verdictId: string, helpful: boolean) {
+    try {
+      await invoke('submitFeedback', {
+        targetType: 'verdict',
+        targetId: verdictId,
+        helpful,
+      });
+      setFeedbackSubmitted((prev) => ({ ...prev, [verdictId]: true }));
+    } catch {
+      // silent feedback error
+    }
+  }
 
   async function checkConflicts(targetKey: string) {
     setLoading(true);
@@ -280,35 +294,60 @@ function IssuePanel() {
                   </Box>
                 ) : (
                   /* Action Buttons */
-                  <Inline space="space.100">
-                    <Button
-                      onClick={() => {
-                        setResolvingVerdictId(verdict.id);
-                        setResolutionAction('comply');
-                        setResolutionNote('Adjusted plan to comply with decision');
-                      }}
-                    >
-                      Comply
-                    </Button>
-                    <Button
-                      onClick={() => {
-                        setResolvingVerdictId(verdict.id);
-                        setResolutionAction('supersede');
-                        setNewStatement(`Superseding: ${decision.statement}`);
-                      }}
-                    >
-                      Supersede
-                    </Button>
-                    <Button
-                      appearance="subtle"
-                      onClick={() => {
-                        setResolvingVerdictId(verdict.id);
-                        setResolutionAction('exception');
-                        setResolutionNote('');
-                      }}
-                    >
-                      Request Exception
-                    </Button>
+                  <Inline space="space.100" alignBlock="center" spread="space-between">
+                    <Inline space="space.100">
+                      <Button
+                        onClick={() => {
+                          setResolvingVerdictId(verdict.id);
+                          setResolutionAction('comply');
+                          setResolutionNote('Adjusted plan to comply with decision');
+                        }}
+                      >
+                        Comply
+                      </Button>
+                      <Button
+                        onClick={() => {
+                          setResolvingVerdictId(verdict.id);
+                          setResolutionAction('supersede');
+                          setNewStatement(`Superseding: ${decision.statement}`);
+                        }}
+                      >
+                        Supersede
+                      </Button>
+                      <Button
+                        appearance="subtle"
+                        onClick={() => {
+                          setResolvingVerdictId(verdict.id);
+                          setResolutionAction('exception');
+                          setResolutionNote('');
+                        }}
+                      >
+                        Request Exception
+                      </Button>
+                    </Inline>
+
+                    {/* Feedback loop */}
+                    <Inline space="space.050" alignBlock="center">
+                      <Text>Helpful?</Text>
+                      {feedbackSubmitted[verdict.id] ? (
+                        <Lozenge appearance="success">Feedback Saved</Lozenge>
+                      ) : (
+                        <Inline space="space.050">
+                          <Button
+                            appearance="subtle"
+                            onClick={() => void handleFeedback(verdict.id, true)}
+                          >
+                            👍
+                          </Button>
+                          <Button
+                            appearance="subtle"
+                            onClick={() => void handleFeedback(verdict.id, false)}
+                          >
+                            👎
+                          </Button>
+                        </Inline>
+                      )}
+                    </Inline>
                   </Inline>
                 )}
               </Stack>

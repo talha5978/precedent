@@ -4,6 +4,7 @@ import {
   auditLogs,
   candidates,
   decisions,
+  feedback as feedbackRepo,
   relations,
   resolutions,
   settingsRepository,
@@ -26,12 +27,18 @@ import {
   type CandidateStatus,
   type Decision,
   type DecisionProposal,
+  type DecisionRelation,
   type DecisionScope,
   type DecisionStatus,
+  type Feedback,
   type Resolution,
   type Verdict,
 } from './domain/models';
-import { getSampleCandidates, getSampleDecisions } from './domain/sampleData';
+import {
+  getSampleCandidates,
+  getSampleDecisions,
+  getSampleRelations,
+} from './domain/sampleData';
 import {
   buildIdempotentCandidates,
   HeuristicDecisionExtractor,
@@ -510,6 +517,172 @@ resolver.define('resolveConflict', async ({ payload, context }) => {
   throw new Error(`Unsupported resolution action: ${String(input.action)}`);
 });
 
+// --- Decision Lineage Resolver ---
+
+resolver.define('getDecisionLineage', async ({ payload }) => {
+  const { decisionId } = (payload as { decisionId?: string }) ?? {};
+  const [allDecisions, allRelations] = await Promise.all([
+    decisions.list({ limit: 100 }),
+    relations.list({ limit: 100 }),
+  ]);
+
+  const decisionMap = new Map<string, Decision>();
+  for (const dec of allDecisions.items) {
+    decisionMap.set(dec.id, dec);
+  }
+
+  // If a specific decisionId is provided, filter lineage around that decision
+  if (decisionId) {
+    const focus = decisionMap.get(decisionId);
+    if (!focus) throw new Error(`Decision "${decisionId}" not found.`);
+
+    const relevantRelations = allRelations.items.filter(
+      (r) => r.fromId === decisionId || r.toId === decisionId,
+    );
+
+    const relatedIds = new Set<string>([decisionId]);
+    for (const r of relevantRelations) {
+      relatedIds.add(r.fromId);
+      relatedIds.add(r.toId);
+    }
+
+    const relevantDecisions = Array.from(relatedIds)
+      .map((id) => decisionMap.get(id))
+      .filter((d): d is Decision => d !== undefined);
+
+    return {
+      focusDecisionId: decisionId,
+      decisions: relevantDecisions,
+      relations: relevantRelations,
+    };
+  }
+
+  // If no specific decisionId, return the complete decision graph
+  return {
+    decisions: allDecisions.items,
+    relations: allRelations.items,
+  };
+});
+
+// --- Health Dashboard Resolver ---
+
+resolver.define('getDashboardStats', async () => {
+  const [decPage, candPage, relPage, resPage, verdPage] = await Promise.all([
+    decisions.list({ limit: 100 }),
+    candidates.list({ limit: 100 }),
+    relations.list({ limit: 100 }),
+    resolutions.list({ limit: 100 }),
+    verdicts.list({ limit: 100 }),
+  ]);
+
+  const active = decPage.items.filter((d) => d.status === 'active').length;
+  const superseded = decPage.items.filter((d) => d.status === 'superseded').length;
+  const underReview = decPage.items.filter((d) => d.status === 'under_review').length;
+  const expired = decPage.items.filter((d) => d.status === 'expired').length;
+
+  const conflictsDetected = verdPage.items.filter((v) => v.verdict === 'conflict').length;
+  const possibleConflicts = verdPage.items.filter((v) => v.verdict === 'possible_conflict').length;
+
+  const complyCount = resPage.items.filter((r) => r.action === 'comply').length;
+  const supersedeCount = resPage.items.filter((r) => r.action === 'supersede').length;
+  const exceptionCount = resPage.items.filter((r) => r.action === 'exception').length;
+
+  // Decision violation hotspot ranking
+  const violationsByDecision: Record<string, number> = {};
+  for (const v of verdPage.items) {
+    if (v.verdict === 'conflict') {
+      violationsByDecision[v.decisionId] = (violationsByDecision[v.decisionId] || 0) + 1;
+    }
+  }
+
+  const topViolated = Object.entries(violationsByDecision)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([decisionId, count]) => {
+      const dec = decPage.items.find((d) => d.id === decisionId);
+      return {
+        decisionId,
+        statement: dec ? dec.statement : decisionId,
+        violationCount: count,
+      };
+    });
+
+  return {
+    decisions: {
+      total: decPage.items.length,
+      active,
+      superseded,
+      underReview,
+      expired,
+    },
+    candidates: {
+      total: candPage.items.length,
+      pending: candPage.items.filter((c) => c.status === 'pending').length,
+      confirmed: candPage.items.filter((c) => c.status === 'confirmed').length,
+      rejected: candPage.items.filter((c) => c.status === 'rejected').length,
+    },
+    conflicts: {
+      conflictsDetected,
+      possibleConflicts,
+      totalEvaluated: verdPage.items.length,
+    },
+    resolutions: {
+      total: resPage.items.length,
+      comply: complyCount,
+      supersede: supersedeCount,
+      exception: exceptionCount,
+      resolutionRate:
+        conflictsDetected > 0 ? Math.min(1, resPage.items.length / conflictsDetected) : 1,
+    },
+    relations: {
+      total: relPage.items.length,
+      supersedes: relPage.items.filter((r) => r.type === 'supersedes').length,
+      dependsOn: relPage.items.filter((r) => r.type === 'depends_on').length,
+    },
+    topViolated,
+  };
+});
+
+// --- Feedback Loop Resolver ---
+
+resolver.define('submitFeedback', async ({ payload, context }) => {
+  const { targetType, targetId, helpful, comment } = (payload as {
+    targetType?: 'candidate' | 'verdict';
+    targetId?: string;
+    helpful?: boolean;
+    comment?: string;
+  }) ?? {};
+
+  if (!targetType || !targetId || typeof helpful !== 'boolean') {
+    throw new Error('targetType, targetId, and helpful boolean are required.');
+  }
+
+  const actor = await getActorId(context);
+  const feedbackId = `fb_${targetType}_${targetId}_${actor}`;
+  const record: Feedback = {
+    id: feedbackId,
+    schemaVersion: CURRENT_SCHEMA_VERSION,
+    targetType,
+    targetId,
+    helpful,
+    comment,
+    actor,
+    createdAt: new Date().toISOString(),
+  };
+
+  await feedbackRepo.put(record);
+  return { success: true, feedback: record };
+});
+
+resolver.define('getFeedback', async ({ payload }) => {
+  const { targetId } = (payload as { targetId?: string }) ?? {};
+  if (!targetId) throw new Error('targetId is required.');
+
+  const all = await feedbackRepo.list({ limit: 100 });
+  const matches = all.items.filter((f: Feedback) => f.targetId === targetId);
+  return { feedback: matches };
+});
+
 // --- Stats & Demo Seeding ---
 
 resolver.define('getStats', async () => {
@@ -533,6 +706,7 @@ resolver.define('getStats', async () => {
 resolver.define('seedSampleData', async () => {
   const sampleDecisions = getSampleDecisions();
   const sampleCandidates = getSampleCandidates();
+  const sampleRelations = getSampleRelations();
 
   for (const dec of sampleDecisions) {
     await decisions.put(dec);
@@ -540,10 +714,14 @@ resolver.define('seedSampleData', async () => {
   for (const cand of sampleCandidates) {
     await candidates.put(cand);
   }
+  for (const rel of sampleRelations) {
+    await relations.put(rel);
+  }
 
   return {
     seededDecisions: sampleDecisions.length,
     seededCandidates: sampleCandidates.length,
+    seededRelations: sampleRelations.length,
   };
 });
 

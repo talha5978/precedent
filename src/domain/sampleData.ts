@@ -2,10 +2,39 @@ import {
   CURRENT_SCHEMA_VERSION,
   type Candidate,
   type Decision,
+  type DecisionRelation,
 } from './models';
 
 export function getSampleDecisions(): Decision[] {
   return [
+    {
+      id: 'dec_sample_postgres_14_legacy',
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      statement: 'Use PostgreSQL 14 for relational persistence with manual schema migrations',
+      rationale:
+        'Initial operational baseline chosen for service MVP before platform-wide managed instance standard.',
+      status: 'superseded',
+      owner: 'Legacy Systems Team',
+      scope: {
+        projectIds: [],
+        components: ['database', 'persistence'],
+        labels: ['architecture', 'db'],
+        keywords: ['postgres', 'postgresql', 'sql'],
+        codePaths: [],
+      },
+      source: {
+        type: 'page',
+        id: 'conf_adr_000',
+        url: 'https://confluence.example.com/display/ENG/ADR-000-Initial-Database-Stack',
+        quotedExcerpt:
+          'Decision: Deploy standalone PostgreSQL 14 containers on ECS.',
+        contentHash: 'hash_adr_000',
+      },
+      confidence: 0.9,
+      createdAt: '2025-06-10T08:00:00.000Z',
+      confirmedBy: 'Site Administrator',
+      confirmedAt: '2025-06-10T08:30:00.000Z',
+    },
     {
       id: 'dec_sample_postgres',
       schemaVersion: CURRENT_SCHEMA_VERSION,
@@ -117,6 +146,31 @@ export function getSampleDecisions(): Decision[] {
       createdAt: '2026-02-20T16:00:00.000Z',
       confirmedBy: 'Site Administrator',
       confirmedAt: '2026-02-20T16:15:00.000Z',
+    },
+  ];
+}
+
+export function getSampleRelations(): DecisionRelation[] {
+  return [
+    {
+      id: 'rel_sample_pg16_supersedes_pg14',
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      fromId: 'dec_sample_postgres',
+      toId: 'dec_sample_postgres_14_legacy',
+      type: 'supersedes',
+      createdBy: 'Site Administrator',
+      createdAt: '2026-01-15T10:00:00.000Z',
+      reason: 'Upgraded baseline to PostgreSQL 16 managed RDS cluster.',
+    },
+    {
+      id: 'rel_sample_redis_depends_postgres',
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      fromId: 'dec_sample_redis_cache',
+      toId: 'dec_sample_postgres',
+      type: 'depends_on',
+      createdBy: 'Site Administrator',
+      createdAt: '2026-02-20T16:15:00.000Z',
+      reason: 'Cache data reconstructibility requires PostgreSQL as source of truth.',
     },
   ];
 }
