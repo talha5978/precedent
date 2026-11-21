@@ -24,6 +24,10 @@ app:
 permissions:
   scopes:
     - storage:app
+    - read:issue-type:jira
     - read:project:jira
+    - read:project.property:jira
+    - read:user:jira
+    - read:application-role:jira
     - read:permission:jira
     - read:space:confluence
