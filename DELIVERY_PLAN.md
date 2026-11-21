@@ -148,4 +148,12 @@ Keep each milestone deployable, and verify Forge limits and APIs before adopting
   - [x] Define matching semantics: empty dimensions are unrestricted, values in a dimension are
     alternatives, populated dimensions combine as restrictions, and an entirely empty scope is
     global.
-  - [ ] Connect source metadata and reviewer-edited scope to extraction and conflict retrieval.
+  - [x] Connect source metadata and reviewer-edited scope to extraction and conflict retrieval.
+- [x] Tier A, step 5: human review inbox.
+  - [x] List pending candidate decisions with statement, rationale, excerpt, confidence, and scope tags.
+  - [x] Implement confirm, edit-and-confirm, reject, and bulk confirmation.
+  - [x] Record reviewer attribution, confirmation timestamp, and structured audit logs.
+- [x] Tier A, step 6: decision registry.
+  - [x] Filterable and searchable registry by status (active, superseded, under review), query, and scope.
+  - [x] Detailed decision view with full rationale, source attribution, quote, and governed dimensions.
+  - [x] Seed sample data action for instant testing and evaluation of realistic engineering decisions.

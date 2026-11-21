@@ -1,12 +1,24 @@
 import api, { route } from '@forge/api';
 import Resolver from '@forge/resolver';
-import { settingsRepository } from './storage/repositories';
+import { auditLogs, candidates, decisions, settingsRepository } from './storage/repositories';
 import {
   type ProjectOption,
   type SetupOptions,
   type SetupSettings,
   type SpaceOption,
 } from './domain/setup';
+import {
+  confirmCandidateProposal,
+  filterCandidates,
+  filterDecisions,
+  rejectCandidateProposal,
+} from './domain/decisions';
+import {
+  type CandidateStatus,
+  type DecisionScope,
+  type DecisionStatus,
+} from './domain/models';
+import { getSampleCandidates, getSampleDecisions } from './domain/sampleData';
 
 const resolver = new Resolver();
 const DEFAULT_SETTINGS = {
@@ -30,6 +42,20 @@ type ConfluenceSpacePage = {
   results?: Array<{ id: string | number; key: string; name: string }>;
   _links?: { next?: string };
 };
+
+async function getActorId(context?: { accountId?: string }): Promise<string> {
+  if (context?.accountId) return context.accountId;
+  try {
+    const res = await api.asUser().requestJira(route`/rest/api/3/myself`);
+    if (res.ok) {
+      const data = (await res.json()) as { accountId?: string; displayName?: string };
+      return data.accountId || data.displayName || 'authenticated-user';
+    }
+  } catch {
+    // Fall back to safe fallback
+  }
+  return 'site-admin';
+}
 
 async function loadSetupOptions(): Promise<SetupOptions> {
   const warnings: string[] = [];
@@ -172,6 +198,150 @@ resolver.define('saveSetup', async ({ payload }) => {
     includedSpaceIds,
     updatedAt: settings.updatedAt,
   } satisfies SetupSettings;
+});
+
+// --- Candidate Review Inbox Resolvers ---
+
+resolver.define('listCandidates', async ({ payload }) => {
+  const filter = (payload ?? {}) as { status?: CandidateStatus; query?: string };
+  const page = await candidates.list({ limit: 100 });
+  const items = filterCandidates(page.items, {
+    status: filter.status,
+    query: filter.query,
+  });
+  return { items, total: items.length, nextCursor: page.nextCursor };
+});
+
+resolver.define('confirmCandidate', async ({ payload, context }) => {
+  const input = payload as {
+    candidateId: string;
+    statement?: string;
+    rationale?: string;
+    scope?: DecisionScope;
+  };
+  if (!input?.candidateId) throw new Error('Candidate ID is required.');
+  const candidate = await candidates.get(input.candidateId);
+  if (!candidate) throw new Error(`Candidate "${input.candidateId}" not found.`);
+
+  const actor = await getActorId(context);
+  const result = confirmCandidateProposal({
+    candidate,
+    reviewerId: actor,
+    statement: input.statement,
+    rationale: input.rationale,
+    scope: input.scope,
+  });
+
+  await Promise.all([
+    decisions.put(result.decision),
+    candidates.put(result.updatedCandidate),
+    auditLogs.put(result.auditLog),
+  ]);
+
+  return { decision: result.decision, candidate: result.updatedCandidate };
+});
+
+resolver.define('rejectCandidate', async ({ payload, context }) => {
+  const input = payload as { candidateId: string; reason?: string };
+  if (!input?.candidateId) throw new Error('Candidate ID is required.');
+  const candidate = await candidates.get(input.candidateId);
+  if (!candidate) throw new Error(`Candidate "${input.candidateId}" not found.`);
+
+  const actor = await getActorId(context);
+  const result = rejectCandidateProposal({
+    candidate,
+    reviewerId: actor,
+    reason: input.reason,
+  });
+
+  await Promise.all([
+    candidates.put(result.updatedCandidate),
+    auditLogs.put(result.auditLog),
+  ]);
+
+  return { candidate: result.updatedCandidate };
+});
+
+resolver.define('bulkConfirmCandidates', async ({ payload, context }) => {
+  const input = payload as { candidateIds: string[] };
+  if (!Array.isArray(input?.candidateIds) || input.candidateIds.length === 0) {
+    throw new Error('Select candidates to confirm.');
+  }
+  const actor = await getActorId(context);
+  let confirmedCount = 0;
+
+  for (const id of input.candidateIds) {
+    const candidate = await candidates.get(id);
+    if (candidate && candidate.status === 'pending') {
+      const result = confirmCandidateProposal({ candidate, reviewerId: actor });
+      await Promise.all([
+        decisions.put(result.decision),
+        candidates.put(result.updatedCandidate),
+        auditLogs.put(result.auditLog),
+      ]);
+      confirmedCount += 1;
+    }
+  }
+
+  return { confirmedCount };
+});
+
+// --- Decision Registry Resolvers ---
+
+resolver.define('listDecisions', async ({ payload }) => {
+  const filter = (payload ?? {}) as {
+    status?: DecisionStatus;
+    projectId?: string;
+    query?: string;
+  };
+  const page = await decisions.list({ limit: 100 });
+  const items = filterDecisions(page.items, filter);
+  return { items, total: items.length, nextCursor: page.nextCursor };
+});
+
+resolver.define('getDecision', async ({ payload }) => {
+  const input = payload as { id: string };
+  if (!input?.id) throw new Error('Decision ID is required.');
+  const decision = await decisions.get(input.id);
+  if (!decision) throw new Error(`Decision "${input.id}" not found.`);
+  return decision;
+});
+
+// --- Stats & Demo Seeding ---
+
+resolver.define('getStats', async () => {
+  const [decisionPage, candidatePage] = await Promise.all([
+    decisions.list({ limit: 100 }),
+    candidates.list({ limit: 100 }),
+  ]);
+
+  const activeDecisions = decisionPage.items.filter((d) => d.status === 'active').length;
+  const supersededDecisions = decisionPage.items.filter((d) => d.status === 'superseded').length;
+  const pendingCandidates = candidatePage.items.filter((c) => c.status === 'pending').length;
+
+  return {
+    totalDecisions: decisionPage.items.length,
+    activeDecisions,
+    supersededDecisions,
+    pendingCandidates,
+  };
+});
+
+resolver.define('seedSampleData', async () => {
+  const sampleDecisions = getSampleDecisions();
+  const sampleCandidates = getSampleCandidates();
+
+  for (const dec of sampleDecisions) {
+    await decisions.put(dec);
+  }
+  for (const cand of sampleCandidates) {
+    await candidates.put(cand);
+  }
+
+  return {
+    seededDecisions: sampleDecisions.length,
+    seededCandidates: sampleCandidates.length,
+  };
 });
 
 export const handler = resolver.getDefinitions();
