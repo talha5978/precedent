@@ -24,8 +24,14 @@ app:
 permissions:
   scopes:
     - storage:app
+    - read:avatar:jira
+    - read:group:jira
     - read:issue-type:jira
+    - read:issue-type-hierarchy:jira
     - read:project:jira
+    - read:project-category:jira
+    - read:project-version:jira
+    - read:project.component:jira
     - read:project.property:jira
     - read:user:jira
     - read:application-role:jira
