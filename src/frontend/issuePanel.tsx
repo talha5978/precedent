@@ -8,6 +8,7 @@ import ForgeReconciler, {
   Lozenge,
   Spinner,
   Stack,
+  Strong,
   Text,
   TextArea,
   Textfield,
@@ -168,18 +169,18 @@ function IssuePanel() {
                 </Inline>
 
                 <Text>
-                  <strong>Why flagged:</strong> {verdict.explanation}
+                  <Strong>Why flagged:</Strong> {verdict.explanation}
                 </Text>
 
                 {verdict.triggeringPhrases.length > 0 && (
                   <Text>
-                    <strong>Triggering text:</strong> “{verdict.triggeringPhrases.join('”, “')}”
+                    <Strong>Triggering text:</Strong> “{verdict.triggeringPhrases.join('”, “')}”
                   </Text>
                 )}
 
                 <Box padding="space.075" backgroundColor="color.background.neutral">
                   <Text>
-                    <strong>Prior rationale:</strong> {decision.rationale} (Source: {decision.source.type})
+                    <Strong>Prior rationale:</Strong> {decision.rationale} (Source: {decision.source.type})
                   </Text>
                 </Box>
 

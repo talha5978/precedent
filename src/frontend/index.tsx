@@ -9,6 +9,7 @@ import ForgeReconciler, {
   Lozenge,
   Select,
   Stack,
+  Strong,
   Tag,
   TagGroup,
   Text,
@@ -401,11 +402,11 @@ function App() {
                   </Inline>
                   <Stack space="space.050">
                     <Text>
-                      <strong>Rationale:</strong> {selectedDecision.rationale}
+                      <Strong>Rationale:</Strong> {selectedDecision.rationale}
                     </Text>
                     {selectedDecision.owner && (
                       <Text>
-                        <strong>Owner:</strong> {selectedDecision.owner}
+                        <Strong>Owner:</Strong> {selectedDecision.owner}
                       </Text>
                     )}
                   </Stack>
@@ -413,7 +414,7 @@ function App() {
                   <Box padding="space.100" backgroundColor="color.background.neutral">
                     <Stack space="space.050">
                       <Text>
-                        <strong>Source ({selectedDecision.source.type}):</strong> {selectedDecision.source.url}
+                        <Strong>Source ({selectedDecision.source.type}):</Strong> {selectedDecision.source.url}
                       </Text>
                       <Text>“{selectedDecision.source.quotedExcerpt}”</Text>
                     </Stack>
@@ -422,7 +423,7 @@ function App() {
                   {selectedDecision.scope.keywords.length > 0 && (
                     <Stack space="space.050">
                       <Text>
-                        <strong>Governed Keywords & Components:</strong>
+                        <Strong>Governed Keywords & Components:</Strong>
                       </Text>
                       <TagGroup>
                         {selectedDecision.scope.keywords.map((kw) => (
@@ -572,13 +573,13 @@ function App() {
                       </Inline>
 
                       <Text>
-                        <strong>Rationale:</strong> {cand.proposal.rationale}
+                        <Strong>Rationale:</Strong> {cand.proposal.rationale}
                       </Text>
 
                       <Box padding="space.100" backgroundColor="color.background.neutral">
                         <Stack space="space.050">
                           <Text>
-                            <strong>Extracted from {cand.proposal.source.type}:</strong>{' '}
+                            <Strong>Extracted from {cand.proposal.source.type}:</Strong>{' '}
                             {cand.proposal.source.url}
                           </Text>
                           <Text>“{cand.proposal.source.quotedExcerpt}”</Text>
